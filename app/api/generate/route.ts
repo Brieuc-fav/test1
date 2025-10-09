@@ -1,0 +1,191 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { generateVideo } from '@/lib/sora';
+import { v4 as uuidv4 } from 'uuid';
+
+export async function POST(request: NextRequest) {
+  try {
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
+    const prompt = formData.get('prompt') as string;
+
+    if (!file || !prompt) {
+      return NextResponse.json(
+        { error: 'Image et prompt requis' },
+        { status: 400 }
+      );
+    }
+
+    // 1. Upload de l'image d'entrée dans Supabase
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${uuidv4()}.${fileExt}`;
+    const fileBuffer = await file.arrayBuffer();
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('input-images')
+      .upload(fileName, fileBuffer, {
+        contentType: file.type,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('Supabase upload error:', uploadError);
+      return NextResponse.json(
+        { error: 'Erreur lors de l\'upload de l\'image' },
+        { status: 500 }
+      );
+    }
+
+    // 2. Récupérer l'URL publique de l'image uploadée
+    const { data: publicUrlData } = supabaseAdmin.storage
+      .from('input-images')
+      .getPublicUrl(fileName);
+
+    const inputImageUrl = publicUrlData.publicUrl;
+
+    // 3. Lire le fichier pour l'envoyer à Sora en image-to-video
+    console.log('📸 Preparing image for Sora image-to-video generation...');
+    const imageBlob = new Blob([fileBuffer], { type: file.type });
+
+    // 4. Enrichir le prompt avec des instructions pour des animations rapides et dynamiques
+    const enhancedPrompt = `${prompt.trim()}. Fast-paced dynamic motion, quick movements, energetic animation, rapid action, high-speed camera movements, dynamic transitions.`;
+    
+    console.log('Calling Sora with image-to-video mode');
+    console.log('Image filename:', fileName);
+    console.log('User prompt:', prompt);
+    console.log('Enhanced prompt:', enhancedPrompt);
+
+    // 5. Appeler Sora pour générer la vidéo de 2 secondes en mode image-to-video
+    const videoUrl = await generateVideo({
+      prompt: enhancedPrompt,
+      height: 1080,
+      width: 1080,
+      n_seconds: 2,
+      n_variants: 1,
+      imageFile: imageBlob,
+      imageFileName: fileName,
+    });
+
+    console.log('Sora video URL:', videoUrl);
+
+    if (!videoUrl) {
+      return NextResponse.json(
+        { error: 'Aucune vidéo générée par Sora' },
+        { status: 500 }
+      );
+    }
+
+    // 5. Télécharger la vidéo générée
+    console.log('📥 Downloading video from Sora URL:', videoUrl);
+    
+    const videoResponse = await fetch(videoUrl, {
+      headers: {
+        'Api-key': process.env.AZURE_API_KEY!,
+      },
+    });
+    
+    console.log('📥 Video download response status:', videoResponse.status);
+    console.log('📥 Video download content-type:', videoResponse.headers.get('content-type'));
+    console.log('📥 Video download content-length:', videoResponse.headers.get('content-length'));
+    
+    if (!videoResponse.ok) {
+      const errorText = await videoResponse.text();
+      console.error('❌ Failed to download generated video:', videoResponse.status, errorText);
+      return NextResponse.json({ 
+        error: `Erreur lors du téléchargement de la vidéo générée (${videoResponse.status}): ${errorText}` 
+      }, { status: 500 });
+    }
+
+    const videoArrayBuffer = await videoResponse.arrayBuffer();
+    console.log('📥 Downloaded video size:', videoArrayBuffer.byteLength, 'bytes');
+    
+    // Supabase storage in Node expects a Buffer/Uint8Array for binary uploads
+    const videoBuffer = new Uint8Array(videoArrayBuffer);
+    console.log('📥 Converted to Uint8Array, size:', videoBuffer.length, 'bytes');
+
+    // 6. Upload de la vidéo générée dans output-videos
+    const outputFileName = `${uuidv4()}.mp4`;
+    console.log('📤 Uploading video to Supabase bucket "output-videos" with filename:', outputFileName);
+    console.log('📤 Video buffer size:', videoBuffer.length, 'bytes');
+    
+    const { data: outputUploadData, error: outputUploadError } = await supabaseAdmin.storage
+      .from('output-videos')
+      .upload(outputFileName, videoBuffer, {
+        contentType: 'video/mp4',
+        upsert: false,
+      });
+
+    if (outputUploadError) {
+      console.error('❌ Output upload error:', JSON.stringify(outputUploadError, null, 2));
+      console.error('❌ Output upload data:', JSON.stringify(outputUploadData, null, 2));
+      console.error('❌ Supabase URL:', process.env.SUPABASE_URL);
+      console.error('❌ Using service role key:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Yes (redacted)' : 'No');
+      return NextResponse.json(
+        { error: `Erreur lors de la sauvegarde de la vidéo générée: ${outputUploadError.message}` },
+        { status: 500 }
+      );
+    }
+    
+    console.log('✅ Video uploaded successfully to Supabase:', outputFileName);
+
+    // 7. Récupérer l'URL publique de la vidéo générée
+    console.log('🔗 Getting public URL for:', outputFileName);
+    const outputPublicUrlResult = await supabaseAdmin.storage
+      .from('output-videos')
+      .getPublicUrl(outputFileName);
+
+    let outputVideoUrl = outputPublicUrlResult.data?.publicUrl;
+    console.log('🔗 Public URL retrieved:', outputVideoUrl);
+
+    // If public URL is not available or will 404 (private bucket), create a signed URL fallback
+    if (!outputVideoUrl) {
+      console.log('⚠️ Public URL not available, creating signed URL...');
+      const signedResult = await supabaseAdmin.storage
+        .from('output-videos')
+        .createSignedUrl(outputFileName, 60 * 60); // 1 hour
+
+      if (signedResult.error) {
+        console.error('❌ Failed to create signed URL for output video:', signedResult.error);
+      } else {
+        outputVideoUrl = signedResult.data?.signedUrl || outputVideoUrl;
+        console.log('✅ Signed URL created:', outputVideoUrl);
+      }
+    }
+
+    // 8. Sauvegarder dans la table projects
+    console.log('💾 Saving project to database...');
+    const { error: dbError } = await supabaseAdmin
+      .from('projects')
+      .insert({
+        input_image_url: inputImageUrl,
+        output_image_url: outputVideoUrl, // Stocke l'URL de la vidéo
+        prompt: prompt,
+        status: 'completed',
+      });
+
+    if (dbError) {
+      console.error('❌ Database error:', JSON.stringify(dbError, null, 2));
+      // Continue même si l'insertion échoue
+    } else {
+      console.log('✅ Project saved to database');
+    }
+
+    // 9. Retourner l'URL de la vidéo générée
+    console.log('✅ Generation complete! Returning URLs...');
+    console.log('   Input image:', inputImageUrl);
+    console.log('   Output video:', outputVideoUrl);
+    return NextResponse.json({
+      success: true,
+      inputImageUrl,
+      outputVideoUrl,
+    });
+  } catch (error) {
+    console.error('Error in generate API:', error);
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Erreur serveur',
+      },
+      { status: 500 }
+    );
+  }
+}

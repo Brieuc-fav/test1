@@ -18,6 +18,7 @@ export interface SoraGenerationParams {
 export interface SoraJobResponse {
   id?: string;
   status?: string;
+  failure_reason?: string;
   generations?: Array<{
     object?: string;
     id?: string;
@@ -36,6 +37,23 @@ export interface SoraJobResponse {
     code?: string;
   };
   [key: string]: any; // Pour capturer d'autres propriétés
+}
+
+/**
+ * Convertit les codes d'erreur Sora en messages lisibles
+ */
+function getFailureReasonMessage(failureReason: string): string {
+  const errorMessages: Record<string, string> = {
+    'face_upload_not_allowed': '❌ Les images contenant des visages ne sont pas autorisées pour des raisons de sécurité. Veuillez utiliser une image sans visage visible.',
+    'content_policy_violation': '❌ Le contenu de votre image ou prompt viole la politique d\'utilisation.',
+    'image_too_large': '❌ L\'image est trop volumineuse. Veuillez utiliser une image plus petite.',
+    'invalid_image_format': '❌ Format d\'image non valide. Utilisez JPG ou PNG.',
+    'prompt_too_long': '❌ Le prompt est trop long. Veuillez le raccourcir.',
+    'rate_limit_exceeded': '❌ Trop de requêtes. Veuillez réessayer dans quelques minutes.',
+    'insufficient_quota': '❌ Quota insuffisant. Veuillez vérifier votre abonnement Azure.',
+  };
+
+  return errorMessages[failureReason] || `❌ Erreur: ${failureReason}`;
 }
 
 /**
@@ -197,6 +215,16 @@ async function pollJobStatus(jobId: string, maxAttempts = 60): Promise<string> {
     console.log(`🎬 Sora - Job status: ${jobData.status}`);
     console.log('🎬 Sora - Full job data:', JSON.stringify(jobData, null, 2));
 
+    if (jobData.status === 'failed') {
+      const failureReason = jobData.failure_reason || 'Unknown error';
+      console.log('🎬 Sora - Job failed:', {
+        errorCode: failureReason,
+        errorMessage: getFailureReasonMessage(failureReason),
+        fullError: jobData.failure_reason
+      });
+      throw new Error(`Video generation failed: ${getFailureReasonMessage(failureReason)}`);
+    }
+
     if (jobData.status === 'succeeded') {
       console.log('🎬 Sora - Job succeeded! Waiting for video to be fully ready...');
       // Wait a few seconds to ensure video is available for download
@@ -232,15 +260,8 @@ async function pollJobStatus(jobId: string, maxAttempts = 60): Promise<string> {
       throw new Error(`Job succeeded but no video URL found. Response: ${JSON.stringify(jobData)}`);
     }
 
-    if (jobData.status === 'failed') {
-      const errorMessage = jobData.error?.message || 'Unknown error';
-      const errorCode = jobData.error?.code || 'N/A';
-      console.error('🎬 Sora - Job failed:', { errorCode, errorMessage, fullError: jobData.error });
-      throw new Error(`Video generation failed [${errorCode}]: ${errorMessage}`);
-    }
-
     // Si le status est "running" ou "pending", continuer à attendre
-    if (jobData.status === 'running' || jobData.status === 'pending') {
+    if (jobData.status === 'running' || jobData.status === 'pending' || jobData.status === 'preprocessing') {
       console.log(`🎬 Sora - Job is ${jobData.status}, waiting 2 seconds...`);
       await new Promise(resolve => setTimeout(resolve, 2000));
       continue;

@@ -2,6 +2,12 @@
 
 import { useState, FormEvent, ChangeEvent } from 'react';
 import Image from 'next/image';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Upload, Sparkles, CheckCircle2, AlertCircle, Loader2, Play } from 'lucide-react';
 
 type Status = 'idle' | 'uploading' | 'generating' | 'success' | 'error';
 
@@ -17,7 +23,6 @@ export default function HomePage() {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
-      // Create preview URL for input image
       const previewUrl = URL.createObjectURL(selectedFile);
       setInputImageUrl(previewUrl);
       setOutputVideoUrl('');
@@ -27,7 +32,7 @@ export default function HomePage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-
+    
     if (!file || !prompt.trim()) {
       setStatus('error');
       setStatusMessage('Veuillez sélectionner une image et entrer un prompt');
@@ -36,7 +41,7 @@ export default function HomePage() {
 
     try {
       setStatus('uploading');
-      setStatusMessage('Upload de l\'image en cours...');
+      setStatusMessage("Upload de l'image en cours...");
       setOutputVideoUrl('');
 
       const formData = new FormData();
@@ -72,133 +77,156 @@ export default function HomePage() {
   const isLoading = status === 'uploading' || status === 'generating';
 
   return (
-    <div className="container">
-      <header className="header">
-        <h1>🎬 Video Magic</h1>
-        <p>Transformez vos images en vidéos avec Sora AI</p>
-      </header>
+    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center mb-12 space-y-4">
+          <Badge variant="secondary" className="mb-4">
+            <Sparkles className="w-3 h-3 mr-1" />
+            Propulsé par Sora AI
+          </Badge>
+          <h1 className="text-5xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Créez des vidéos magiques
+          </h1>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Transformez vos images en vidéos captivantes en quelques secondes avec l'intelligence artificielle
+          </p>
+        </div>
 
-      <div className="main-content">
-        <section className="upload-section">
-          <h2>📤 Upload & Configuration</h2>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="file-input">Sélectionnez une image</label>
-              <input
-                id="file-input"
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="file-input"
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="prompt-input">
-                Décrivez l&apos;animation ou la transformation souhaitée
-              </label>
-              <textarea
-                id="prompt-input"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Ex: Make this image come to life with subtle movement, add animation to the scene..."
-                className="textarea"
-                disabled={isLoading}
-              />
-            </div>
-
-            {status !== 'idle' && (
-              <div className={`status-message ${status === 'error' ? 'error' : status === 'success' ? 'success' : 'info'}`}>
-                {isLoading && <span className="loading-spinner"></span>}
-                {' '}{statusMessage}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              className="btn-generate"
-              disabled={isLoading || !file || !prompt.trim()}
-            >
-              {isLoading ? 'Génération en cours...' : '🎬 Générer la vidéo (2s)'}
-            </button>
-          </form>
-        </section>
-
-        <div className="results-section">
-          <div className="result-panel">
-            <h3>
-              <span>📷</span> Image d&apos;entrée
-            </h3>
-            <div className="image-container">
-              {inputImageUrl ? (
-                <Image
-                  src={inputImageUrl}
-                  alt="Image d'entrée"
-                  width={600}
-                  height={600}
-                  style={{ maxWidth: '100%', height: 'auto' }}
+        <Card className="max-w-4xl mx-auto mb-12 shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              Nouvelle génération
+            </CardTitle>
+            <CardDescription>
+              Choisissez une image et décrivez l'animation souhaitée
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <label htmlFor="file-upload" className="text-sm font-medium">
+                  Image source
+                </label>
+                <Input
+                  id="file-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  disabled={isLoading}
+                  className="cursor-pointer"
                 />
-              ) : (
-                <div className="empty-state">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <p>Aucune image sélectionnée</p>
-                </div>
-              )}
-            </div>
-          </div>
+                {file && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    {file.name}
+                  </div>
+                )}
+              </div>
 
-          <div className="result-panel">
-            <h3>
-              <span>🎬</span> Vidéo générée (2s)
-            </h3>
-            <div className="image-container">
-              {outputVideoUrl ? (
-                <video
-                  src={outputVideoUrl}
-                  controls
-                  autoPlay
-                  loop
-                  style={{ maxWidth: '100%', height: 'auto', borderRadius: '12px' }}
-                >
-                  Votre navigateur ne supporte pas la lecture de vidéos.
-                </video>
-              ) : (
-                <div className="empty-state">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <p>
-                    {isLoading
-                      ? 'Génération en cours...'
-                      : 'Votre vidéo générée apparaîtra ici'}
-                  </p>
+              <div className="space-y-2">
+                <label htmlFor="prompt" className="text-sm font-medium">
+                  Description de l'animation
+                </label>
+                <Textarea
+                  id="prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Décrivez comment vous voulez animer l'image... Ex: Make this image come to life with subtle movement"
+                  disabled={isLoading}
+                  rows={4}
+                  className="resize-none"
+                />
+              </div>
+
+              {status !== 'idle' && (
+                <div className={`flex items-center gap-3 p-4 rounded-lg border ${
+                  status === 'error' ? 'bg-destructive/10 border-destructive/30 text-destructive' :
+                  status === 'success' ? 'bg-green-50 border-green-200 text-green-700' :
+                  'bg-blue-50 border-blue-200 text-blue-700'
+                }`}>
+                  {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+                  {status === 'success' && <CheckCircle2 className="w-5 h-5" />}
+                  {status === 'error' && <AlertCircle className="w-5 h-5" />}
+                  <span className="font-medium">{statusMessage}</span>
                 </div>
               )}
-            </div>
-          </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading || !file || !prompt.trim()}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                size="lg"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Génération en cours...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Générer la vidéo
+                  </>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Image d'entrée</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="aspect-video bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                {inputImageUrl ? (
+                  <Image
+                    src={inputImageUrl}
+                    alt="Input"
+                    width={600}
+                    height={600}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                ) : (
+                  <div className="text-center text-muted-foreground">
+                    <Upload className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>Aucune image sélectionnée</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg flex items-center justify-between">
+                Vidéo générée
+                {outputVideoUrl && <Badge variant="secondary">2s</Badge>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="aspect-video bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                {outputVideoUrl ? (
+                  <video
+                    src={outputVideoUrl}
+                    controls
+                    autoPlay
+                    loop
+                    className="max-w-full max-h-full rounded-lg"
+                  >
+                    Votre navigateur ne supporte pas la lecture de vidéos.
+                  </video>
+                ) : (
+                  <div className="text-center text-muted-foreground">
+                    <Play className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>{isLoading ? 'Génération...' : 'Vidéo à venir'}</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

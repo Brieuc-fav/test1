@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { generateVideo } from '@/lib/sora';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: NextRequest) {
   try {
+    // Vérifier l'authentification
+    const supabase = createSupabaseServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Non authentifié' },
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const prompt = formData.get('prompt') as string;
@@ -16,9 +28,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Upload de l'image d'entrée dans Supabase
+    // 1. Upload de l'image d'entrée dans Supabase avec le user_id dans le chemin
     const fileExt = file.name.split('.').pop();
-    const fileName = `${uuidv4()}.${fileExt}`;
+    const fileName = `${user.id}/${uuidv4()}.${fileExt}`;
     const fileBuffer = await file.arrayBuffer();
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
@@ -63,7 +75,7 @@ export async function POST(request: NextRequest) {
       n_seconds: 2,
       n_variants: 1,
       imageFile: imageBlob,
-      imageFileName: fileName,
+      imageFileName: fileName.split('/').pop()!, // Juste le nom du fichier sans le user_id
     });
 
     console.log('Sora video URL:', videoUrl);
@@ -103,8 +115,8 @@ export async function POST(request: NextRequest) {
     const videoBuffer = new Uint8Array(videoArrayBuffer);
     console.log('📥 Converted to Uint8Array, size:', videoBuffer.length, 'bytes');
 
-    // 6. Upload de la vidéo générée dans output-videos
-    const outputFileName = `${uuidv4()}.mp4`;
+    // 6. Upload de la vidéo générée dans output-videos avec le user_id dans le chemin
+    const outputFileName = `${user.id}/${uuidv4()}.mp4`;
     console.log('📤 Uploading video to Supabase bucket "output-videos" with filename:', outputFileName);
     console.log('📤 Video buffer size:', videoBuffer.length, 'bytes');
     
@@ -152,11 +164,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 8. Sauvegarder dans la table projects
+    // 8. Sauvegarder dans la table projects avec le user_id
     console.log('💾 Saving project to database...');
     const { error: dbError } = await supabaseAdmin
       .from('projects')
       .insert({
+        user_id: user.id,
         input_image_url: inputImageUrl,
         output_image_url: outputVideoUrl, // Stocke l'URL de la vidéo
         prompt: prompt,

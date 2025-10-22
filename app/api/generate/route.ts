@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { generateVideo } from '@/lib/sora';
 import { v4 as uuidv4 } from 'uuid';
+import { canGenerateVideo, incrementQuotaUsed, createFreeSubscription } from '@/lib/subscription';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +17,40 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    // Vérifier le quota de l'utilisateur
+    console.log('🔍 Checking user quota...');
+    let canGenerate = await canGenerateVideo(user.id);
+    
+    // Si l'utilisateur n'a pas d'abonnement, créer un abonnement gratuit
+    if (canGenerate === false) {
+      console.log('📝 User has no subscription, creating free subscription...');
+      const newSubscription = await createFreeSubscription(user.id);
+      
+      if (newSubscription) {
+        console.log('✅ Free subscription created');
+        canGenerate = true;
+      } else {
+        return NextResponse.json(
+          { error: 'Impossible de créer l\'abonnement' },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (!canGenerate) {
+      console.log('❌ Quota exceeded for user:', user.id);
+      return NextResponse.json(
+        { 
+          error: 'Quota épuisé',
+          message: 'Vous avez atteint votre limite de générations pour ce mois. Passez à un plan supérieur pour continuer.',
+          upgradeUrl: '/pricing'
+        },
+        { status: 403 }
+      );
+    }
+
+    console.log('✅ Quota OK, proceeding with generation...');
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -183,7 +218,17 @@ export async function POST(request: NextRequest) {
       console.log('✅ Project saved to database');
     }
 
-    // 9. Retourner l'URL de la vidéo générée
+    // 9. Incrémenter le quota utilisé
+    console.log('📊 Incrementing quota for user:', user.id);
+    const quotaUpdated = await incrementQuotaUsed(user.id);
+    
+    if (!quotaUpdated) {
+      console.error('⚠️ Failed to increment quota, but video was generated successfully');
+    } else {
+      console.log('✅ Quota incremented successfully');
+    }
+
+    // 10. Retourner l'URL de la vidéo générée
     console.log('✅ Generation complete! Returning URLs...');
     console.log('   Input image:', inputImageUrl);
     console.log('   Output video:', outputVideoUrl);

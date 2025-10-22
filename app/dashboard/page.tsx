@@ -20,10 +20,18 @@ interface Project {
   user_id: string;
 }
 
+interface Subscription {
+  quota_limit: number;
+  quota_used: number;
+  status: string;
+  stripe_price_id: string;
+}
+
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,8 +44,28 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       loadProjects();
+      loadSubscription();
     }
   }, [user]);
+
+  const loadSubscription = async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('subscriptions')
+        .select('quota_limit, quota_used, status, stripe_price_id')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (fetchError) {
+        console.error('Error loading subscription:', fetchError);
+        return;
+      }
+
+      setSubscription(data);
+    } catch (err: any) {
+      console.error('Error loading subscription:', err);
+    }
+  };
 
   const loadProjects = async () => {
     try {
@@ -64,6 +92,39 @@ export default function DashboardPage() {
   const handleDelete = (deletedId: string) => {
     setProjects(projects.filter((p) => p.id !== deletedId));
   };
+
+  const handleManageSubscription = async () => {
+    try {
+      const response = await fetch('/api/stripe/portal', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur');
+      }
+
+      // Rediriger vers le portail Stripe
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error: any) {
+      console.error('Erreur:', error);
+      alert(error.message || 'Une erreur est survenue');
+    }
+  };
+
+  const getPlanName = () => {
+    if (!subscription?.stripe_price_id) return 'Gratuit';
+    if (subscription.stripe_price_id === process.env.NEXT_PUBLIC_STRIPE_PRICE_BASIC) return 'Basic';
+    if (subscription.stripe_price_id === process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO) return 'Pro';
+    return 'Abonné';
+  };
+
+  const quotaPercentage = subscription
+    ? Math.round((subscription.quota_used / subscription.quota_limit) * 100)
+    : 0;
 
   if (authLoading || !user) {
     return (
@@ -95,6 +156,69 @@ export default function DashboardPage() {
             </Link>
           </Button>
         </div>
+
+        {/* Carte d'abonnement */}
+        {subscription && (
+          <Card className="mb-8 border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    Plan {getPlanName()}
+                    <Badge variant={subscription.status === 'active' ? 'default' : 'secondary'}>
+                      {subscription.status === 'active' ? 'Actif' : subscription.status}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    {subscription.quota_used} / {subscription.quota_limit} générations utilisées ce mois-ci
+                  </CardDescription>
+                </div>
+                <Button onClick={handleManageSubscription} variant="outline">
+                  Gérer l'abonnement
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    quotaPercentage > 80
+                      ? 'bg-red-500'
+                      : quotaPercentage > 50
+                      ? 'bg-yellow-500'
+                      : 'bg-green-500'
+                  }`}
+                  style={{ width: `${quotaPercentage}%` }}
+                />
+              </div>
+              {quotaPercentage >= 100 && (
+                <p className="text-sm text-red-600 mt-2">
+                  ⚠️ Quota épuisé. <Link href="/pricing" className="underline font-semibold">Mettez à niveau votre plan</Link>
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {!subscription && (
+          <Card className="mb-8 border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold mb-1">
+                    Déverrouillez plus de générations
+                  </h3>
+                  <p className="text-muted-foreground">
+                    Obtenez jusqu'à 200 générations par mois avec notre plan Pro
+                  </p>
+                </div>
+                <Button asChild className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
+                  <Link href="/pricing">Voir les plans</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32">

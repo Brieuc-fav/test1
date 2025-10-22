@@ -59,11 +59,11 @@ export default function Navbar() {
               </Link>
             )}
             <Link
-              href="#"
+              href="/pricing"
               className="flex items-center gap-2 text-sm font-medium transition-colors hover:text-primary"
             >
               <CreditCard className="h-4 w-4" />
-              Abonnement
+              Tarifs
             </Link>
           </nav>
         </div>
@@ -100,9 +100,9 @@ export default function Navbar() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="cursor-pointer md:hidden">
-                  <Link href="#" className="flex items-center">
+                  <Link href="/pricing" className="flex items-center">
                     <CreditCard className="mr-2 h-4 w-4" />
-                    Abonnement
+                    Tarifs
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -143,9 +143,9 @@ export default function Navbar() {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="cursor-pointer">
-                    <Link href="#" className="flex items-center">
+                    <Link href="/pricing" className="flex items-center">
                       <CreditCard className="mr-2 h-4 w-4" />
-                      Abonnement
+                      Tarifs
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />

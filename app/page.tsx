@@ -1,16 +1,23 @@
 ﻿'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/lib/supabase-client';
 import { 
   Upload, Wand2, Sparkles, Zap, Video, Download,
   Clock, Shield, Star, CheckCircle2, ArrowRight, Play, Loader2
 } from 'lucide-react';
+
+interface Subscription {
+  quota_limit: number;
+  quota_used: number;
+  status: string;
+}
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -21,7 +28,30 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ url: string } | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (user) {
+      loadSubscription();
+    }
+  }, [user]);
+
+  const loadSubscription = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('quota_limit, quota_used, status')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (!error && data) {
+        setSubscription(data);
+      }
+    } catch (err) {
+      console.error('Error loading subscription:', err);
+    }
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -72,12 +102,25 @@ export default function HomePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Vérifier si c'est une erreur de quota
+        if (response.status === 403 && errorData.error === 'Quota épuisé') {
+          alert('❌ Quota épuisé\n\n' + 
+                errorData.message + '\n\n' +
+                'Cliquez sur OK pour voir nos plans d\'abonnement.');
+          router.push('/pricing');
+          return;
+        }
+        
         throw new Error(errorData.error || 'Erreur lors de la génération');
       }
 
       const data = await response.json();
       setProgress(100);
       setResult({ url: data.outputVideoUrl });
+      
+      // Recharger le quota après génération réussie
+      await loadSubscription();
     } catch (error: any) {
       console.error('Error:', error);
       const errorMessage = error.message || 'Une erreur est survenue';
@@ -134,6 +177,41 @@ export default function HomePage() {
           <div className="max-w-5xl mx-auto">
             <Card className="border-2 shadow-2xl">
               <CardContent className="p-12">
+                {/* Affichage du quota si l'utilisateur est connecté */}
+                {user && subscription && (
+                  <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-blue-900 dark:text-blue-200">
+                          Quota mensuel
+                        </h3>
+                        <p className="text-sm text-blue-800 dark:text-blue-300 mt-1">
+                          {subscription.quota_used} / {subscription.quota_limit} générations utilisées
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {subscription.quota_limit - subscription.quota_used}
+                        </div>
+                        <div className="text-xs text-blue-600">restantes</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 w-full bg-blue-200 dark:bg-blue-900 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all"
+                        style={{
+                          width: `${(subscription.quota_used / subscription.quota_limit) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    {subscription.quota_used >= subscription.quota_limit && (
+                      <p className="mt-3 text-sm text-red-600 font-semibold">
+                        ⚠️ Quota épuisé. <a href="/pricing" className="underline">Passez à un plan supérieur</a>
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Warning Banner */}
                 <div className="mb-8 p-4 bg-amber-50 dark:bg-amber-950/20 border-2 border-amber-200 dark:border-amber-800 rounded-xl">
                   <div className="flex gap-3">

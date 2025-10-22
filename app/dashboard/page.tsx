@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Video, Plus, AlertCircle } from 'lucide-react';
+import { Loader2, Video, Plus, AlertCircle, Sparkles } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -159,41 +159,96 @@ export default function DashboardPage() {
 
         {/* Carte d'abonnement */}
         {subscription && (
-          <Card className="mb-8 border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50">
-            <CardHeader>
-              <div className="flex items-center justify-between">
+          <Card className="mb-8 border-4 border-purple-300 bg-gradient-to-br from-purple-600 via-blue-600 to-pink-600 shadow-2xl overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full -ml-24 -mb-24"></div>
+            
+            <CardHeader className="relative">
+              <div className="flex items-start justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-3 text-3xl font-black text-white mb-3">
+                    <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+                      {getPlanName() === 'Pro' ? '👑' : '⚡'}
+                    </div>
                     Plan {getPlanName()}
-                    <Badge variant={subscription.status === 'active' ? 'default' : 'secondary'}>
-                      {subscription.status === 'active' ? 'Actif' : subscription.status}
-                    </Badge>
                   </CardTitle>
-                  <CardDescription className="mt-2">
-                    {subscription.quota_used} / {subscription.quota_limit} générations utilisées ce mois-ci
-                  </CardDescription>
+                  <Badge 
+                    className={`${
+                      subscription.status === 'active' 
+                        ? 'bg-green-500 hover:bg-green-600' 
+                        : 'bg-red-500 hover:bg-red-600'
+                    } text-white font-bold px-4 py-1 text-sm`}
+                  >
+                    {subscription.status === 'active' ? '✓ Actif' : subscription.status}
+                  </Badge>
                 </div>
-                <Button onClick={handleManageSubscription} variant="outline">
-                  Gérer l'abonnement
+                <Button 
+                  onClick={handleManageSubscription} 
+                  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white border-2 border-white/30 font-bold"
+                >
+                  ⚙️ Gérer
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    quotaPercentage > 80
-                      ? 'bg-red-500'
-                      : quotaPercentage > 50
-                      ? 'bg-yellow-500'
-                      : 'bg-green-500'
-                  }`}
-                  style={{ width: `${quotaPercentage}%` }}
-                />
+            
+            <CardContent className="relative">
+              <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-6 mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-white/80 text-sm font-semibold uppercase tracking-wide mb-1">
+                      Générations ce mois
+                    </p>
+                    <p className="text-white text-2xl font-black">
+                      {subscription.quota_used} / {subscription.quota_limit}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-5xl font-black text-white drop-shadow-lg">
+                      {subscription.quota_limit - subscription.quota_used}
+                    </div>
+                    <div className="text-white/80 text-sm font-bold uppercase">
+                      Restantes
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Barre de progression améliorée */}
+                <div className="relative">
+                  <div className="w-full bg-white/30 rounded-full h-4 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2 ${
+                        quotaPercentage > 80
+                          ? 'bg-gradient-to-r from-red-400 to-red-600'
+                          : quotaPercentage > 50
+                          ? 'bg-gradient-to-r from-yellow-400 to-orange-500'
+                          : 'bg-gradient-to-r from-green-400 to-emerald-500'
+                      }`}
+                      style={{ width: `${Math.max(quotaPercentage, 3)}%` }}
+                    >
+                      <span className="text-xs font-bold text-white drop-shadow">
+                        {quotaPercentage}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {quotaPercentage >= 100 && (
-                <p className="text-sm text-red-600 mt-2">
-                  ⚠️ Quota épuisé. <Link href="/pricing" className="underline font-semibold">Mettez à niveau votre plan</Link>
+
+              {quotaPercentage >= 100 ? (
+                <div className="bg-red-500 rounded-xl p-4 flex items-center justify-between">
+                  <span className="text-white font-bold">⚠️ Quota épuisé !</span>
+                  <Link href="/pricing">
+                    <Button className="bg-white text-red-600 hover:bg-gray-100 font-bold">
+                      Upgrader 🚀
+                    </Button>
+                  </Link>
+                </div>
+              ) : quotaPercentage > 80 ? (
+                <p className="text-yellow-200 font-semibold text-center">
+                  ⚡ Plus que {subscription.quota_limit - subscription.quota_used} générations !
+                </p>
+              ) : (
+                <p className="text-white/90 text-center font-medium">
+                  ✨ Encore {subscription.quota_limit - subscription.quota_used} générations disponibles
                 </p>
               )}
             </CardContent>
@@ -201,19 +256,25 @@ export default function DashboardPage() {
         )}
 
         {!subscription && (
-          <Card className="mb-8 border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1">
-                    Déverrouillez plus de générations
-                  </h3>
-                  <p className="text-muted-foreground">
-                    Obtenez jusqu'à 200 générations par mois avec notre plan Pro
-                  </p>
-                </div>
-                <Button asChild className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
-                  <Link href="/pricing">Voir les plans</Link>
+          <Card className="mb-8 border-4 border-purple-300 bg-gradient-to-br from-purple-600 to-blue-600 shadow-2xl">
+            <CardContent className="pt-8 pb-8">
+              <div className="text-center text-white">
+                <div className="text-6xl mb-4">🎁</div>
+                <h3 className="text-3xl font-black mb-3">
+                  Déverrouillez plus de générations !
+                </h3>
+                <p className="text-white/90 text-xl mb-6">
+                  Obtenez jusqu'à 200 générations par mois avec notre plan Pro
+                </p>
+                <Button 
+                  asChild 
+                  size="lg"
+                  className="bg-white text-purple-600 hover:bg-gray-100 font-bold text-lg px-8 py-6"
+                >
+                  <Link href="/pricing">
+                    <Sparkles className="mr-2" />
+                    Voir les plans 🚀
+                  </Link>
                 </Button>
               </div>
             </CardContent>
